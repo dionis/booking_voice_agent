@@ -174,3 +174,9 @@ cython_debug/
 .pypirc
 
 config/*
+/.idea/vcs.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/modules.xml
+/.idea/misc.xml
+/.idea/booking_voice_agent.iml
