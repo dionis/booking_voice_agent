@@ -180,3 +180,5 @@ config/*
 /.idea/modules.xml
 /.idea/misc.xml
 /.idea/booking_voice_agent.iml
+
+/config/*
