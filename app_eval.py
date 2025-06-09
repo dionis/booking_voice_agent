@@ -11,10 +11,17 @@ from livekit.plugins import (
     google
 )
 
+import os
+from supabase import create_client, Client
+
 #from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 load_dotenv('config/.env')
 
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+
+supabase: Client = None
 
 class Assistant(Agent):
     def __init__(self) -> None:

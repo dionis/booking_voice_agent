@@ -1,0 +1,15 @@
+{
+"Title": "Experience the Best of Off-Road Excursions",
+"Time": "4 hours",
+"Transportation": "Please note that pick-up will begin at least one hour before your scheduled experience, depending on your hotel’s location.",
+"Standard_rate": ["Single Pax Buggy – Solo $ 79", "Double Buggy (2 Pax) $ 110", "Family Buggy (Up to 4 Pax) $ 200", "Single ATV – Ride Solo, Ride Wild! $ 79", "Double ATV – Ride Together $ 110", "VIP Single pax - Solo $ 150", "VIP Double (up to 2 peoples) $ 180", "VIP Familiar (up to 4 peoples) $ 270"],
+"Standard_rate_description": "",
+"Booking_Summary": "Experience the Best of Off-Road Excursions Total: 0",
+"Description": "Experience the thrill of off-roading through Punta Cana’s rugged countryside! Whether you choose a buggy or ATV, get ready to race through secluded jungle trails, splash through mud-filled paths, and enjoy the adrenaline rush as your expert guide leads the way. But the adventure doesn’t end there! After the off-road fun, take a refreshing dip in an underground cave, a hidden natural wonder with crystal-clear waters. Finally, relax at the famous Macao Beach, known for its pristine white sand and turquoise waters—perfect for a swim or simply soaking in the Caribbean sun. VIP Adventure Ride – Premium Comfort & Exclusive Experience For those who want an upgraded experience, our VIP Adventure Ride offers the perfect combination of luxury and excitement. Ride in top-tier Honda, Can-Am, and Polaris vehicles, ensuring a smooth, powerful, and stylish journey. Your exclusive adventure follows specially designed trails, taking you through lush tropical landscapes and charming local villages, immersing you in the true culture and beauty of Punta Cana. A highlight of this VIP experience is the stop at Atabey Park, where you’ll get to taste the finest Dominican coffee, cacao, and tobacco—a unique cultural experience available in the park’s specialty shopping area. Then, enjoy a revitalizing swim in Atabey Park’s underground freshwater spring, a hidden oasis where you can cool off before heading to Macao Beach for a perfect ending—swimming, relaxing under swaying palms, or simply enjoying the breathtaking scenery. What’s Included? ✔️ Round-trip transportation ✔️ Macao Beach visit ✔️ Indian Cave exploration & swimming ✔️ Exclusive coffee, cacao, and tobacco tasting ✔️ Use of helmet for safety ✔️ Professional bilingual guide",
+"start_time": ["09:00 AM", "12:00 PM", "03:00 PM"],
+"Experience_type": " Outdoor Adventure ✅ Off-Road Excursion ✅ Adrenaline-Packed Tour",
+"Attributes": "✅ Thrill Level: Moderate to High (great for adventure seekers) ✅ Location Highlights: Macao Beach, Indian Cave ✅ Inclusions: Safety gear, professional guide",
+"Categories": "Adventure & Extreme Sports ✅ Nature & Wildlife Experiences ✅ Cultural & Scenic Tours ✅ Beach & Cave Exploration",
+"Booking_in_advance": "Must be booked no later than three hours before the experience start time.",
+"Live_tour_guide": "Spanish · English · "
+}

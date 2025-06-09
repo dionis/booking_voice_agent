@@ -1,0 +1,15 @@
+{
+"Title": "Samana Discovery Full Day tour",
+"Time": "8 hours",
+"Transportation": "Easy",
+"Standard_rate": "$ 169.99",
+"Standard_rate_description": "Pick-up available (included in price) Cancellation policy",
+"Booking_Summary": "Samana Discovery Full Day tour Adult: 1 x 169.99 = 169.99 Total: 169.99",
+"Description": "Samana Discovery Samana excursion and fell lifted. Enjoy a full day full of adventure, Starting the departure from Punta Cana and Bavaro towards the Miches area, passing through picturesque villages, of humble people. Once in the town of La Cañita we will take the boat that will take us to the Samaná peninsula. Once there, the Safary truck awaits us that will take us up the mountain to take the horses and descend to the Limon Waterfall, one of the highest waterfalls in the Caribbean, you can enjoy a bath in its refreshing water, take a photo or simply appreciate its nature. We return on the horses to take the Safary truck that will take us back to the dock to enjoy a delicious typical Dominican lunch. We continue our adventure on the catamaran that will take us to Cayó levantado or Bacardi Island, its white sand beaches and turquoise waters will captivate you, the stay on the island is 1 hour and 30 minutes. We return again to cañita where the transport awaits us that will bring us back to our hotels. The tours include Round trip transportation Guide in your required language Safary truck Boat tour. Typical lunch Visit the Limon Waterfall Visit the island fell raised. What's included? The tours include Round trip transportation Guide in your required language Safary truck Boat tour. Typical lunch Visit the Limon Waterfall Visit the island fell raised. Please note comfortable clothes swimwear ",
+"start_time": ["02:07 PM"],
+"Experience_type": "Day tour / activity",
+"Attributes": "Beach · Family friendly · Eco friendly · Outdoor",
+"Categories": "Adventure · City tours · Cultural and theme tours · Bus / minivan tour · Day trips and excursions · Horseback riding · Nature · Safari / wildlife · Sailing / boat tour",
+"Booking_in_advance": "Can be booked no later than 12 hour(s) before 07:00",
+"Live_tour_guide": "English · Spanish · French"
+}
