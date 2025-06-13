@@ -19,11 +19,21 @@ from livekit.plugins import (
 )
 
 # from livekit.plugins import noise_cancellation
+import supabase_client
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
+
+from util import load_prompt
 
 logger = logging.getLogger("restaurant-example")
 logger.setLevel(logging.INFO)
 
 load_dotenv('config/.env')
+
+
+EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 voices = {
     "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
@@ -38,6 +48,9 @@ WELCOME_GREETINGS =  (f"Hi there! Welcome to our {SERVICE_NAME}."
                       f"Just ask me to switch to any of these languages.")
 
 WELCOME_RESERVATION =  (f"Please, tell us your favorite tour features for show our options?.")
+
+NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES = (f"Sorry, not exits tour with your preferences, "
+                                                    f"can you give another details about?.")
 
 @dataclass
 class UserData:
@@ -233,6 +246,7 @@ async def to_greeter(context: RunContext_T) -> Agent:
     return await curr_agent._transfer_to_agent("greeter", context)
 
 
+
 class BaseAgent(Agent):
     async def on_enter(self) -> None:
         agent_name = self.__class__.__name__
@@ -267,6 +281,63 @@ class BaseAgent(Agent):
         return next_agent, f"Transferring to {name}."
 
 
+
+##### SEEE EXAMPLE ##########################################
+class TriageAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            instructions=load_prompt('triage_prompt.yaml'),
+            stt=deepgram.STT(),
+            llm=openai.LLM(model="gpt-4o-mini"),
+            tts=cartesia.TTS(),
+            vad=silero.VAD.load()
+        )
+
+    @function_tool
+    async def identify_customer(self, first_name: str, last_name: str):
+        """
+        Identify a customer by their first and last name.
+
+        Args:
+            first_name: The customer's first name
+            last_name: The customer's last name
+        """
+        userdata: UserData = self.session.userdata
+        userdata.first_name = first_name
+        userdata.last_name = last_name
+        userdata.customer_id = db.get_or_create_customer(first_name, last_name)
+
+        return f"Thank you, {first_name}. I've found your account."
+
+    @function_tool
+    async def transfer_to_sales(self, context: RunContext_T) -> Agent:
+        # Create a personalized message if customer is identified
+        userdata: UserData = self.session.userdata
+        if userdata.is_identified():
+            message = f"Thank you, {userdata.first_name}. I'll transfer you to our Sales team who can help you find the perfect product."
+        else:
+            message = "I'll transfer you to our Sales team who can help you find the perfect product."
+
+        await self.session.say(message)
+        return await self._transfer_to_agent("sales", context)
+
+    @function_tool
+    async def transfer_to_returns(self, context: RunContext_T) -> Agent:
+        # Create a personalized message if customer is identified
+        userdata: UserData = self.session.userdata
+        if userdata.is_identified():
+            message = f"Thank you, {userdata.first_name}. I'll transfer you to our Returns department who can assist with your return or exchange."
+        else:
+            message = "I'll transfer you to our Returns department who can assist with your return or exchange."
+
+        await self.session.say(message)
+        return await self._transfer_to_agent("returns", context)
+
+
+
+
+
+##############################################################
 class Greeter(BaseAgent):
     def __init__(self, menu: str) -> None:
 
@@ -278,6 +349,7 @@ class Greeter(BaseAgent):
                 f"You are a friendly restaurant receptionist. The menu is: {menu}\n"
                 "Your jobs are to greet the caller and understand if they want to "
                 "make a reservation or order takeaway. Guide them to the right agent using tools."
+                "ask to new user if want to a reservation or order takeaway."
                 "You can switch to a different language if asked.  Don't use any unpronounceable character"
             ),
 
@@ -383,8 +455,25 @@ class Greeter(BaseAgent):
 ###
 #   Call remote rag functions
 ##
-async def my_rag_lookup(query_to_rag: str) -> list[str]:
-    return [query_to_rag]
+async def rag_lookup(query_to_rag: str) -> list[str]:
+    model = SentenceTransformer(EMBEDDING_MODEL)
+
+    # Create embeddings for each chunk
+    embedding = model.encode(query_to_rag).tolist()
+    print(embedding)
+
+    ## Fix error https://github.com/langchain-ai/langchain/issues/10065
+    result_rag = supabase_client.search_similar_embedding_experiences(embedding)
+    experience_id = -1
+
+    if len(result_rag.data) == 0:
+        print(f"Not exist result :{result_rag.data}")
+    else:
+        experience_id =  result_rag.data[0]['experience_id']
+        # for iResult_in_rag in result_rag.data:
+        #     print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
+
+    return experience_id
 
 
 class Reservation(BaseAgent):
@@ -412,11 +501,21 @@ class Reservation(BaseAgent):
     async def on_user_turn_completed(
                 self, turn_ctx: ChatContext, new_message: ChatMessage,
         ) -> None:
-            rag_content = await my_rag_lookup(new_message.text_content())
+            rag_content = await rag_lookup(new_message.text_content())
 
-            turn_ctx.add_message(role="assistant", content=rag_content)
+            if rag_content < 0 :
+                #Say there are not result
+                self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+            else:
+                booking_userdata = turn_ctx.userdata
+                booking_userdata.booking_tour_id = rag_content
 
-            await self.update_chat_ctx(turn_ctx)
+                #
+                # Use for give more LLM context !!!! IMPORTANT !!!!!
+                #
+
+                #turn_ctx.add_message(role="assistant", content=rag_content)
+                #await self.update_chat_ctx(turn_ctx)
 
     @function_tool()
     async def update_reservation_time(
@@ -543,7 +642,11 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
     menu = "Pizza: $10, Salad: $5, Ice Cream: $3, Coffee: $2"
+
     userdata = UserData()
+
+    booking_userdata = BookingUserData()
+
     userdata.agents.update(
         {
             "greeter": Greeter(menu),
@@ -552,8 +655,18 @@ async def entrypoint(ctx: JobContext):
             "checkout": Checkout(menu),
         }
     )
-    session = AgentSession[UserData](
-        userdata = userdata,
+
+    booking_userdata.agents.update(
+        {
+            "greeter": Greeter(menu),
+            "reservation": Reservation(),
+            "takeaway": Takeaway(menu),
+            "checkout": Checkout(menu),
+        }
+    )
+
+    session = AgentSession[BookingUserData](
+        userdata = booking_userdata,
 
 
         stt = deepgram.STT(model="nova-3", language="multi"),
@@ -574,7 +687,7 @@ async def entrypoint(ctx: JobContext):
     )
 
     await session.start(
-        agent = userdata.agents["greeter"],
+        agent = booking_userdata.agents["greeter"],
         room = ctx.room,
         room_input_options = RoomInputOptions(
             # noise_cancellation=noise_cancellation.BVC(),
