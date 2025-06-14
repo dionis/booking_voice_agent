@@ -44,10 +44,12 @@ voices = {
 
 SERVICE_NAME = 'Punta Cana Booking platform'
 WELCOME_GREETINGS =  (f"Hi there! Welcome to our {SERVICE_NAME}."
-                      f" I can speak in multiple languages including Spanish, French, German, and Italian. "
+                      f" I can speak in multiple languages including Spanish and English. "
                       f"Just ask me to switch to any of these languages.")
 
 WELCOME_RESERVATION =  (f"Please, tell us your favorite tour features for show our options?.")
+
+WELCOME_RESERVATION_MANAGEMENT =  (f"Please, tell us your tour's reservations adjustment, first find out in our database?.")
 
 NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES = (f"Sorry, not exits tour with your preferences, "
                                                     f"can you give another details about?.")
@@ -120,6 +122,8 @@ class BookingUserData:
 
     agents: dict[str, Agent] = field(default_factory=dict)
     prev_agent: Optional[Agent] = None
+
+    agents_language: Optional[str] = 'en'
 
     def summarize(self) -> str:
         data = {
@@ -252,7 +256,7 @@ class BaseAgent(Agent):
         agent_name = self.__class__.__name__
         logger.info(f"entering task {agent_name}")
 
-        userdata: UserData = self.session.userdata
+        userdata: BookingUserData = self.session.userdata
         chat_ctx = self.chat_ctx.copy()
 
         # add the previous agent's chat history to the current agent
@@ -278,7 +282,13 @@ class BaseAgent(Agent):
         next_agent = userdata.agents[name]
         userdata.prev_agent = current_agent
 
-        return next_agent, f"Transferring to {name}."
+        if next_agent != None:
+            next_agent.current_language = userdata.agents_language
+            logger.info(f"Change the language in Agent to {userdata.agents_language}")
+            await next_agent._switch_language(next_agent.current_language)
+            return next_agent, f"Transferring to {name}."
+        else:
+          return next_agent, f"Transferring to {name}."
 
 
 
@@ -286,7 +296,7 @@ class BaseAgent(Agent):
 class TriageAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            instructions=load_prompt('triage_prompt.yaml'),
+            instructions = load_prompt('triage_prompt.yaml'),
             stt=deepgram.STT(),
             llm=openai.LLM(model="gpt-4o-mini"),
             tts=cartesia.TTS(),
@@ -305,7 +315,7 @@ class TriageAgent(BaseAgent):
         userdata: UserData = self.session.userdata
         userdata.first_name = first_name
         userdata.last_name = last_name
-        userdata.customer_id = db.get_or_create_customer(first_name, last_name)
+        userdata.customer_id = supabase_client.get_or_create_customer(first_name, last_name)
 
         return f"Thank you, {first_name}. I've found your account."
 
@@ -343,15 +353,17 @@ class Greeter(BaseAgent):
 
         #Define default language
         self.current_language = "es"
+        # instructions:
+        #     "You are a friendly booking tour receptionist "
+        #      "First ask to the user the language wanted and change to the user's preference."
+        #      "You must do the question in english and spanish"
+        #      "You can switch to a different language if asked.  Don't use any unpronounceable character"
+        #      "Your jobs are to greet the caller and understand if they want to "
+        #      "make a reservation or order takeaway. Guide them to the right agent using tools."
+        #      "ask to new user if want to a reservation or order takeaway."
 
         super().__init__(
-            instructions=(
-                f"You are a friendly restaurant receptionist. The menu is: {menu}\n"
-                "Your jobs are to greet the caller and understand if they want to "
-                "make a reservation or order takeaway. Guide them to the right agent using tools."
-                "ask to new user if want to a reservation or order takeaway."
-                "You can switch to a different language if asked.  Don't use any unpronounceable character"
-            ),
+            instructions = load_prompt('greetings_prompt.yaml'),
 
             #llm=openai.LLM(parallel_tool_calls=False),
 
@@ -397,13 +409,24 @@ class Greeter(BaseAgent):
         This function handles transitioning to the reservation agent
         who will collect the necessary details like reservation time,
         customer name and phone number."""
+
+        #Set language to communicate in another Agents
+        userdata = context.userdata
+        userdata.agents_language = self.current_language
+
+
         return await self._transfer_to_agent("reservation", context)
 
     @function_tool()
     async def to_takeaway(self, context: RunContext_T) -> tuple[Agent, str]:
-        """Called when the user wants to place a takeaway order.
+        """Called when the user wants to update a booking tour.
         This includes handling orders for pickup, delivery, or when the user wants to
         proceed to checkout with their existing order."""
+
+        #Set language to communicate in another Agents
+        userdata = context.userdata
+        userdata.agents_language = self.current_language
+
         return await self._transfer_to_agent("takeaway", context)
 
     async def on_enter(self):
@@ -411,16 +434,18 @@ class Greeter(BaseAgent):
 
     async def _switch_language(self, language_code: str) -> None:
         """Helper method to switch the language"""
-        if language_code == self.current_language:
-            await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
-            return
+        # if language_code == self.current_language:
+        #     await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+        #     return
 
         if self.tts is not None:
             self.tts.update_options(language=language_code)
 
         if self.stt is not None:
             deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
-            self.stt.update_options(language=deepgram_language)
+
+            if hasattr(self.stt, 'update_options'):
+                self.stt.update_options(language = deepgram_language)
 
         self.current_language = language_code
 
@@ -429,26 +454,36 @@ class Greeter(BaseAgent):
     @function_tool
     async  def switch_to_english(self):
         """Switch to speaking English"""
+        self.current_language = 'en'
+
         await self._switch_language("en")
 
     @function_tool
     async def switch_to_spanish(self):
         """Switch to speaking Spanish"""
+        self.current_language = 'es'
+
         await self._switch_language("es")
 
     @function_tool
     async def switch_to_french(self):
         """Switch to speaking French"""
+        self.current_language = 'fr'
+
         await self._switch_language("fr")
 
     @function_tool
     async def switch_to_german(self):
         """Switch to speaking German"""
+        self.current_language = 'de'
+
         await self._switch_language("de")
 
     @function_tool
     async def switch_to_italian(self):
         """Switch to speaking Italian"""
+        self.current_language = 'it'
+
         await self._switch_language("it")
 
 
@@ -465,23 +500,28 @@ async def rag_lookup(query_to_rag: str) -> list[str]:
     ## Fix error https://github.com/langchain-ai/langchain/issues/10065
     result_rag = supabase_client.search_similar_embedding_experiences(embedding)
     experience_id = -1
+    listOfExperiences = []
 
     if len(result_rag.data) == 0:
         print(f"Not exist result :{result_rag.data}")
     else:
-        experience_id =  result_rag.data[0]['experience_id']
-        # for iResult_in_rag in result_rag.data:
-        #     print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
+        for iResult_in_rag in result_rag.data:
+            experience = dict()
+            experience['title'] = iResult_in_rag['title']
+            experience['experience_id'] = iResult_in_rag['experience_id']
+            print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
 
-    return experience_id
+    return listOfExperiences
 
 
 class Reservation(BaseAgent):
     def __init__(self) -> None:
+        # instructions = "You are a reservation agent at a Punta Cana Booking platform. Your jobs are to ask for "
+        # "the reservation time, then customer's name, and phone number. Then "
+        # "confirm the reservation details with the customer.",
+
         super().__init__(
-            instructions="You are a reservation agent at a restaurant. Your jobs are to ask for "
-            "the reservation time, then customer's name, and phone number. Then "
-            "confirm the reservation details with the customer.",
+            instructions=load_prompt('reservation_prompt.yaml'),
             tools=[
                 update_name,
                 update_last_name,
@@ -494,28 +534,90 @@ class Reservation(BaseAgent):
             ],
             tts = cartesia.TTS(voice=voices["reservation"]),
         )
+
+        self.language_names = {
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian"
+        }
+
+        self.deepgram_language_codes = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr-CA",
+            "de": "de",
+            "it": "it"
+        }
+
+        self.greetings = {
+            "en": "Hello! I'm now speaking in English. How can I help you today?",
+            "es": "¡Hola! Ahora estoy hablando en español. ¿Cómo puedo ayudarte hoy?",
+            "fr": "Bonjour! Je parle maintenant en français. Comment puis-je vous aider aujourd'hui?",
+            "de": "Hallo! Ich spreche jetzt Deutsch. Wie kann ich Ihnen heute helfen?",
+            "it": "Ciao! Ora sto parlando in italiano. Come posso aiutarti oggi?"
+        }
+
     async def on_enter(self):
-        await self.session.say( WELCOME_RESERVATION)
+
+        if self.current_language != None and self.current_language != '':
+            logger.info(f"Agent language is {self.current_language}")
+            await self._switch_language(self.current_language)
+
+        await self.session.say(WELCOME_RESERVATION)
+
+
+    async def _switch_language(self, language_code: str) -> None:
+        """Helper method to switch the language"""
+        # if language_code == self.current_language:
+        #     await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+        #     return
+
+        if self.tts is not None:
+            print(f"Update tts options to {language_code}")
+            self.tts.update_options(language = language_code)
+
+        # session_tts = await self.session.tts
+        #
+        # if session_tts is not None:
+        #     session_tts.update_options(language=language_code)
+
+        if self.stt is not None:
+            deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
+
+            if hasattr(self.stt, 'update_options'):
+              self.stt.update_options(language = deepgram_language)
+
+        self.current_language = language_code
+
+        #await self.session.say(self.greetings[language_code])
 
     ### Wait the user ask for booking reservation options
     async def on_user_turn_completed(
                 self, turn_ctx: ChatContext, new_message: ChatMessage,
         ) -> None:
-            rag_content = await rag_lookup(new_message.text_content())
+            rag_content = await rag_lookup( new_message.text_content)
+            strListOfExperiences = NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES
 
-            if rag_content < 0 :
+            if len(rag_content) == 0 :
                 #Say there are not result
-                self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+                #self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+                print(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
             else:
-                booking_userdata = turn_ctx.userdata
-                booking_userdata.booking_tour_id = rag_content
+                # booking_userdata = turn_ctx.userdata
+                # booking_userdata.booking_tour_id = rag_content
+                self.listOfExperenciesInRagSearch = rag_content
+                listOfExperiences = [ iexperiences['title'] for iexperiences in rag_content ]
+                separator = "\n"
+                strListOfExperiences = separator.join(listOfExperiences)
 
                 #
                 # Use for give more LLM context !!!! IMPORTANT !!!!!
                 #
 
-                #turn_ctx.add_message(role="assistant", content=rag_content)
-                #await self.update_chat_ctx(turn_ctx)
+                turn_ctx.add_message(role="assistant", content = strListOfExperiences)
+                await self.update_chat_ctx(turn_ctx)
 
     @function_tool()
     async def update_reservation_time(
@@ -553,6 +655,54 @@ class Takeaway(BaseAgent):
             tools=[to_greeter],
             tts=cartesia.TTS(voice=voices["takeaway"]),
         )
+
+        self.language_names = {
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian"
+        }
+
+        self.deepgram_language_codes = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr-CA",
+            "de": "de",
+            "it": "it"
+        }
+
+        self.greetings = {
+            "en": "Hello! I'm now speaking in English. How can I help you today?",
+            "es": "¡Hola! Ahora estoy hablando en español. ¿Cómo puedo ayudarte hoy?",
+            "fr": "Bonjour! Je parle maintenant en français. Comment puis-je vous aider aujourd'hui?",
+            "de": "Hallo! Ich spreche jetzt Deutsch. Wie kann ich Ihnen heute helfen?",
+            "it": "Ciao! Ora sto parlando in italiano. Come posso aiutarti oggi?"
+        }
+
+    async def on_enter(self):
+
+        if self.current_language != None and self.current_language != '':
+            await self._switch_language(self.current_language)
+
+        await self.session.say(WELCOME_RESERVATION_MANAGEMENT)
+
+    async def _switch_language(self, language_code: str) -> None:
+        """Helper method to switch the language"""
+        if language_code == self.current_language:
+            await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+            return
+
+        if self.tts is not None:
+            self.tts.update_options(language=language_code)
+
+        if self.stt is not None:
+            deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
+            self.stt.update_options(language=deepgram_language)
+
+        self.current_language = language_code
+
+        await self.session.say(self.greetings[language_code])
 
     @function_tool()
     async def update_order(
