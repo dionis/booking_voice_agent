@@ -85,6 +85,12 @@ def get_experience(id: int) -> Optional[dict]:
     result = supabase.table('experiences').select("*").eq('id', id).execute()
     return result.data[0] if result.data else None
 
+def get_experience_by_title(title: str) -> Optional[dict]:
+    """Get an experience by title"""
+    result = supabase.table('experiences').select("*").text_search('title',title).execute()
+
+    return result.data[0] if result.data else None
+
 def update_experience(id: int, experience: Experience) -> dict:
     """Update an existing experience"""
     data = experience.model_dump()

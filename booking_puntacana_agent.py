@@ -15,7 +15,8 @@ from livekit.plugins import (
     cartesia,
     deepgram,
     silero,
-    google
+    google,
+    elevenlabs
 )
 
 # from livekit.plugins import noise_cancellation
@@ -35,12 +36,26 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
+# voices = {
+#     "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
+#     "reservation": "156fb8d2-335b-4950-9cb3-a2d33befec77",
+#     "takeaway": "6f84f4b8-58a2-430c-8c79-688dad597532",
+#     "checkout": "39b376fc-488e-4d0c-8b37-e00b72059fdd",
+# }
+
 voices = {
-    "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
-    "reservation": "156fb8d2-335b-4950-9cb3-a2d33befec77",
-    "takeaway": "6f84f4b8-58a2-430c-8c79-688dad597532",
-    "checkout": "39b376fc-488e-4d0c-8b37-e00b72059fdd",
+    "greeter": "9BWtsMINqrJLrRacOk9x",
+    "reservation": "FGY2WhTYpPnrIDTdsKH5",
+    "takeaway": "TX3LPaxmHKxFdv7VOQHJ",
+    "checkout": "XrExE9yKIg1WjnnlVkGX",
+    "default": "Xb7hH8MSUJpSbSDYk0k2"
 }
+
+
+
+
+
+
 
 SERVICE_NAME = 'Punta Cana Booking platform'
 WELCOME_GREETINGS =  (f"Hi there! Welcome to our {SERVICE_NAME}."
@@ -53,6 +68,10 @@ WELCOME_RESERVATION_MANAGEMENT =  (f"Please, tell us your tour's reservations ad
 
 NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES = (f"Sorry, not exits tour with your preferences, "
                                                     f"can you give another details about?.")
+
+MUST_SELECT_AN_OPTIONS_IN_LIST = (f"You must select an experiences in a list.")
+
+NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION = (f"Sorry, not exits tour with your preferences.")
 
 @dataclass
 class UserData:
@@ -241,7 +260,6 @@ async def update_booking_children_number(
         userdata.booking_children_number = booking_children_number
         return f"The booking child number is updated to {booking_children_number}"
 
-
 @function_tool()
 async def to_greeter(context: RunContext_T) -> Agent:
     """Called when user asks any unrelated questions or requests
@@ -249,6 +267,31 @@ async def to_greeter(context: RunContext_T) -> Agent:
     curr_agent: BaseAgent = context.session.current_agent
     return await curr_agent._transfer_to_agent("greeter", context)
 
+###
+#   Call remote rag functions
+##
+async def rag_lookup(query_to_rag: str) -> list[str]:
+    model = SentenceTransformer(EMBEDDING_MODEL)
+
+    # Create embeddings for each chunk
+    embedding = model.encode(query_to_rag).tolist()
+    print(embedding)
+
+    ## Fix error https://github.com/langchain-ai/langchain/issues/10065
+    result_rag = supabase_client.search_similar_embedding_experiences(embedding)
+    experience_id = -1
+    listOfExperiences = []
+
+    if len(result_rag.data) == 0:
+        print(f"Not exist result :{result_rag.data}")
+    else:
+        for iResult_in_rag in result_rag.data:
+            experience = dict()
+            experience['title'] = iResult_in_rag['title']
+            experience['experience_id'] = iResult_in_rag['experience_id']
+            print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
+
+    return listOfExperiences
 
 
 class BaseAgent(Agent):
@@ -299,7 +342,8 @@ class TriageAgent(BaseAgent):
             instructions = load_prompt('triage_prompt.yaml'),
             stt=deepgram.STT(),
             llm=openai.LLM(model="gpt-4o-mini"),
-            tts=cartesia.TTS(),
+            #tts=cartesia.TTS(),
+            tts=elevenlabs.TTS( voice_id = voices['default'],     model="eleven_multilingual_v2" ),
             vad=silero.VAD.load()
         )
 
@@ -372,10 +416,17 @@ class Greeter(BaseAgent):
                 temperature=0.8,
             ),
 
-            tts=cartesia.TTS(
-                voice = voices["greeter"],
-                language = self.current_language
+            # tts=cartesia.TTS(
+            #     voice = voices["greeter"],
+            #     language = self.current_language
+            # ),
+
+            tts = elevenlabs.TTS(
+                voice_id = voices["greeter"],
+                model="eleven_multilingual_v2",
+                #language = self.current_language
             ),
+
         )
         self.menu = menu
 
@@ -415,7 +466,8 @@ class Greeter(BaseAgent):
         userdata.agents_language = self.current_language
 
 
-        return await self._transfer_to_agent("reservation", context)
+        #return await self._transfer_to_agent("reservation", context)
+        return await self._transfer_to_agent("experiences_searcher", context)
 
     @function_tool()
     async def to_takeaway(self, context: RunContext_T) -> tuple[Agent, str]:
@@ -487,31 +539,147 @@ class Greeter(BaseAgent):
         await self._switch_language("it")
 
 
-###
-#   Call remote rag functions
-##
-async def rag_lookup(query_to_rag: str) -> list[str]:
-    model = SentenceTransformer(EMBEDDING_MODEL)
 
-    # Create embeddings for each chunk
-    embedding = model.encode(query_to_rag).tolist()
-    print(embedding)
 
-    ## Fix error https://github.com/langchain-ai/langchain/issues/10065
-    result_rag = supabase_client.search_similar_embedding_experiences(embedding)
-    experience_id = -1
-    listOfExperiences = []
 
-    if len(result_rag.data) == 0:
-        print(f"Not exist result :{result_rag.data}")
-    else:
-        for iResult_in_rag in result_rag.data:
-            experience = dict()
-            experience['title'] = iResult_in_rag['title']
-            experience['experience_id'] = iResult_in_rag['experience_id']
-            print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
+class  ExperiencesSearcher(BaseAgent):
+    def __init__(self) -> None:
+        # instructions = "You are a reservation agent at a Punta Cana Booking platform. Your jobs are to ask for "
+        # "the reservation time, then customer's name, and phone number. Then "
+        # "confirm the reservation details with the customer.",
 
-    return listOfExperiences
+        super().__init__(
+            instructions=load_prompt('preferences_searcher_prompt.yaml'),
+            tools=[
+                to_greeter
+            ],
+            tts = cartesia.TTS(voice=voices["reservation"]),
+        )
+
+        self.language_names = {
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian"
+        }
+
+        self.deepgram_language_codes = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr-CA",
+            "de": "de",
+            "it": "it"
+        }
+
+        self.greetings = {
+            "en": "Hello! I'm now speaking in English. How can I help you today?",
+            "es": "¡Hola! Ahora estoy hablando en español. ¿Cómo puedo ayudarte hoy?",
+            "fr": "Bonjour! Je parle maintenant en français. Comment puis-je vous aider aujourd'hui?",
+            "de": "Hallo! Ich spreche jetzt Deutsch. Wie kann ich Ihnen heute helfen?",
+            "it": "Ciao! Ora sto parlando in italiano. Come posso aiutarti oggi?"
+        }
+
+    async def on_enter(self):
+
+        if self.current_language != None and self.current_language != '':
+            logger.info(f"Agent language is {self.current_language}")
+            await self._switch_language(self.current_language)
+
+        await self.session.say(WELCOME_RESERVATION)
+
+
+    async def _switch_language(self, language_code: str) -> None:
+        """Helper method to switch the language"""
+        # if language_code == self.current_language:
+        #     await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+        #     return
+
+        if self.tts is not None:
+            print(f"Update tts options to {language_code}")
+            self.tts.update_options(language = language_code)
+
+        # session_tts = await self.session.tts
+        #
+        # if session_tts is not None:
+        #     session_tts.update_options(language=language_code)
+
+        if self.stt is not None:
+            deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
+
+            if hasattr(self.stt, 'update_options'):
+              self.stt.update_options(language = deepgram_language)
+
+        self.current_language = language_code
+
+        #await self.session.say(self.greetings[language_code])
+
+
+    @function_tool()
+    async def search_possible_experiences(
+        self,
+        user_preferences: Annotated[str, Field(description="The reservation time")],
+        context: RunContext_T,
+    ) -> str:
+        """Called when the user provides their preferences for possible tour of experiences.
+       and tell a list of possible recommendations."""
+        rag_content = await rag_lookup(user_preferences)
+
+        strListOfExperiences = NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES
+
+        if len(rag_content) == 0:
+            # Say there are not result
+            self.session.say(strListOfExperiences)
+            print(strListOfExperiences)
+            return ""
+        else:
+            # booking_userdata = turn_ctx.userdata
+            # booking_userdata.booking_tour_id = rag_content
+
+            listOfExperiences = [iexperiences['title'] for iexperiences in rag_content]
+            setOfListOfExperiences = set (listOfExperiences)
+            self.listOfExperiencesInRagSearch = setOfListOfExperiences
+
+            separator = "\n"
+            strListOfExperiences = separator.join(setOfListOfExperiences)
+
+            return strListOfExperiences
+
+
+    @function_tool()
+    async def user_select_option(
+                self,
+                selected_option: Annotated[str, Field(description="An user selected options in an experiences list")],
+                context: RunContext_T,
+        ) -> str:
+            """Called when the user select a possible options in a list of title of experiences or tour.
+            The selected title is given as selected_option"""
+
+            ## Verify if a str is a title and search for possible title id
+            if selected_option == '':
+                await self.session.say(MUST_SELECT_AN_OPTIONS_IN_LIST)
+            else:
+              experiences_option =  supabase_client.get_experience_by_title(selected_option)
+
+              if experiences_option is not None:
+                  userdata = context.userdata
+                  userdata.booking_tour_id = experiences_option['']
+                  return f"You want a reservation for {experiences_option['title']}"
+              else:
+                  await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
+
+
+    @function_tool()
+    async def to_reservation(self, context: RunContext_T) -> tuple[Agent, str]:
+        """Called when user finish to select an experiences in a list to make or update a reservation.
+        This function handles transitioning to the reservation agent
+        who will collect the necessary details."""
+
+        # Set language to communicate in another Agents
+        userdata = context.userdata
+        userdata.agents_language = self.current_language
+
+        return await self._transfer_to_agent("reservation", context)
 
 
 class Reservation(BaseAgent):
@@ -594,30 +762,30 @@ class Reservation(BaseAgent):
         #await self.session.say(self.greetings[language_code])
 
     ### Wait the user ask for booking reservation options
-    async def on_user_turn_completed(
-                self, turn_ctx: ChatContext, new_message: ChatMessage,
-        ) -> None:
-            rag_content = await rag_lookup( new_message.text_content)
-            strListOfExperiences = NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES
-
-            if len(rag_content) == 0 :
-                #Say there are not result
-                #self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
-                print(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
-            else:
-                # booking_userdata = turn_ctx.userdata
-                # booking_userdata.booking_tour_id = rag_content
-                self.listOfExperenciesInRagSearch = rag_content
-                listOfExperiences = [ iexperiences['title'] for iexperiences in rag_content ]
-                separator = "\n"
-                strListOfExperiences = separator.join(listOfExperiences)
-
-                #
-                # Use for give more LLM context !!!! IMPORTANT !!!!!
-                #
-
-                turn_ctx.add_message(role="assistant", content = strListOfExperiences)
-                await self.update_chat_ctx(turn_ctx)
+    # async def on_user_turn_completed(
+    #             self, turn_ctx: ChatContext, new_message: ChatMessage,
+    #     ) -> None:
+    #         rag_content = await rag_lookup( new_message.text_content)
+    #         strListOfExperiences = NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES
+    #
+    #         if len(rag_content) == 0 :
+    #             #Say there are not result
+    #             #self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+    #             print(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+    #         else:
+    #             # booking_userdata = turn_ctx.userdata
+    #             # booking_userdata.booking_tour_id = rag_content
+    #             self.listOfExperenciesInRagSearch = rag_content
+    #             listOfExperiences = [ iexperiences['title'] for iexperiences in rag_content ]
+    #             separator = "\n"
+    #             strListOfExperiences = separator.join(listOfExperiences)
+    #
+    #             #
+    #             # Use for give more LLM context !!!! IMPORTANT !!!!!
+    #             #
+    #
+    #             turn_ctx.add_message(role="assistant", content = strListOfExperiences)
+    #             await self.update_chat_ctx(turn_ctx)
 
     @function_tool()
     async def update_reservation_time(
@@ -653,7 +821,8 @@ class Takeaway(BaseAgent):
                 "Clarify special requests and confirm the order with the customer."
             ),
             tools=[to_greeter],
-            tts=cartesia.TTS(voice=voices["takeaway"]),
+            #tts=cartesia.TTS(voice=voices["takeaway"]),
+            tts=elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
         )
 
         self.language_names = {
@@ -735,7 +904,9 @@ class Checkout(BaseAgent):
                 "information, including the card number, expiry date, and CVV step by step."
             ),
             tools=[update_name, update_phone, to_greeter],
-            tts=cartesia.TTS(voice=voices["checkout"]),
+            #tts=cartesia.TTS(voice=voices["checkout"]),
+            tts=elevenlabs.TTS( voice_id=voices["checkout"],     model="eleven_multilingual_v2"),
+
         )
 
     @function_tool()
@@ -797,14 +968,14 @@ async def entrypoint(ctx: JobContext):
 
     booking_userdata = BookingUserData()
 
-    userdata.agents.update(
-        {
-            "greeter": Greeter(menu),
-            "reservation": Reservation(),
-            "takeaway": Takeaway(menu),
-            "checkout": Checkout(menu),
-        }
-    )
+    # userdata.agents.update(
+    #     {
+    #         "greeter": Greeter(menu),
+    #         "reservation": Reservation(),
+    #         "takeaway": Takeaway(menu),
+    #         "checkout": Checkout(menu),
+    #     }
+    # )
 
     booking_userdata.agents.update(
         {
@@ -812,6 +983,7 @@ async def entrypoint(ctx: JobContext):
             "reservation": Reservation(),
             "takeaway": Takeaway(menu),
             "checkout": Checkout(menu),
+            "experiences_searcher": ExperiencesSearcher()
         }
     )
 
@@ -827,8 +999,17 @@ async def entrypoint(ctx: JobContext):
             temperature=0.8,
         ),
 
-        tts = cartesia.TTS(),
+        #tts = cartesia.TTS(),
 
+        tts = elevenlabs.TTS(
+            voice_id="ODq5zmih8GrVes37Dizd",
+            model="eleven_multilingual_v2"
+        ),
+
+        # google.TTS(
+        #     gender="female",
+        #     voice_name="en-US-Standard-H",
+        # )
         vad = silero.VAD.load(),
 
         max_tool_steps = 5,
