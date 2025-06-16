@@ -553,7 +553,13 @@ class  ExperiencesSearcher(BaseAgent):
             tools=[
                 to_greeter
             ],
-            tts = cartesia.TTS(voice=voices["reservation"]),
+            #tts = cartesia.TTS(voice=voices["reservation"]),
+
+            tts = elevenlabs.TTS(
+                voice_id=voices["greeter"],
+                model="eleven_multilingual_v2",
+                # language = self.current_language
+            ),
         )
 
         self.language_names = {
@@ -700,7 +706,13 @@ class Reservation(BaseAgent):
                 update_booking_children_number,
                 to_greeter
             ],
-            tts = cartesia.TTS(voice=voices["reservation"]),
+            #tts = cartesia.TTS(voice=voices["reservation"]),
+
+            tts=elevenlabs.TTS(
+                voice_id=voices["greeter"],
+                model="eleven_multilingual_v2",
+                # language = self.current_language
+            ),
         )
 
         self.language_names = {
@@ -822,7 +834,7 @@ class Takeaway(BaseAgent):
             ),
             tools=[to_greeter],
             #tts=cartesia.TTS(voice=voices["takeaway"]),
-            tts=elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
+            tts = elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
         )
 
         self.language_names = {
@@ -905,7 +917,7 @@ class Checkout(BaseAgent):
             ),
             tools=[update_name, update_phone, to_greeter],
             #tts=cartesia.TTS(voice=voices["checkout"]),
-            tts=elevenlabs.TTS( voice_id=voices["checkout"],     model="eleven_multilingual_v2"),
+            tts = elevenlabs.TTS( voice_id=voices["checkout"],     model="eleven_multilingual_v2"),
 
         )
 
