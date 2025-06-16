@@ -6,7 +6,7 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import Field
 
-from livekit.agents import JobContext, WorkerOptions, cli, ChatContext, ChatMessage
+from livekit.agents import JobContext, WorkerOptions, cli, ChatContext, ChatMessage, get_job_context
 from livekit.agents.llm import function_tool
 from livekit.agents.voice import Agent, AgentSession, RunContext
 from livekit.agents.voice.room_io import RoomInputOptions
@@ -36,20 +36,20 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
-# voices = {
-#     "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
-#     "reservation": "156fb8d2-335b-4950-9cb3-a2d33befec77",
-#     "takeaway": "6f84f4b8-58a2-430c-8c79-688dad597532",
-#     "checkout": "39b376fc-488e-4d0c-8b37-e00b72059fdd",
-# }
-
 voices = {
-    "greeter": "9BWtsMINqrJLrRacOk9x",
-    "reservation": "FGY2WhTYpPnrIDTdsKH5",
-    "takeaway": "TX3LPaxmHKxFdv7VOQHJ",
-    "checkout": "XrExE9yKIg1WjnnlVkGX",
-    "default": "Xb7hH8MSUJpSbSDYk0k2"
+    "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
+    "reservation": "156fb8d2-335b-4950-9cb3-a2d33befec77",
+    "takeaway": "6f84f4b8-58a2-430c-8c79-688dad597532",
+    "checkout": "39b376fc-488e-4d0c-8b37-e00b72059fdd",
 }
+
+# voices = {
+#     "greeter": "9BWtsMINqrJLrRacOk9x",
+#     "reservation": "FGY2WhTYpPnrIDTdsKH5",
+#     "takeaway": "TX3LPaxmHKxFdv7VOQHJ",
+#     "checkout": "XrExE9yKIg1WjnnlVkGX",
+#     "default": "Xb7hH8MSUJpSbSDYk0k2"
+# }
 
 
 
@@ -290,6 +290,7 @@ async def rag_lookup(query_to_rag: str) -> list[str]:
             experience['title'] = iResult_in_rag['title']
             experience['experience_id'] = iResult_in_rag['experience_id']
             print(f"The most related experiences is : {iResult_in_rag['experience_id']}")
+            listOfExperiences.append(experience)
 
     return listOfExperiences
 
@@ -328,8 +329,9 @@ class BaseAgent(Agent):
         if next_agent != None:
             next_agent.current_language = userdata.agents_language
             logger.info(f"Change the language in Agent to {userdata.agents_language}")
-            await next_agent._switch_language(next_agent.current_language)
             return next_agent, f"Transferring to {name}."
+            #await next_agent._switch_language(next_agent.current_language)
+
         else:
           return next_agent, f"Transferring to {name}."
 
@@ -342,8 +344,8 @@ class TriageAgent(BaseAgent):
             instructions = load_prompt('triage_prompt.yaml'),
             stt=deepgram.STT(),
             llm=openai.LLM(model="gpt-4o-mini"),
-            #tts=cartesia.TTS(),
-            tts=elevenlabs.TTS( voice_id = voices['default'],     model="eleven_multilingual_v2" ),
+            tts=cartesia.TTS(),
+            #tts=elevenlabs.TTS( voice_id = voices['default'],     model="eleven_multilingual_v2" ),
             vad=silero.VAD.load()
         )
 
@@ -416,16 +418,16 @@ class Greeter(BaseAgent):
                 temperature=0.8,
             ),
 
-            # tts=cartesia.TTS(
-            #     voice = voices["greeter"],
-            #     language = self.current_language
-            # ),
-
-            tts = elevenlabs.TTS(
-                voice_id = voices["greeter"],
-                model="eleven_multilingual_v2",
-                #language = self.current_language
+            tts = cartesia.TTS(
+                voice = voices["greeter"],
+                language = self.current_language
             ),
+
+            # tts = elevenlabs.TTS(
+            #     voice_id = voices["greeter"],
+            #     model="eleven_multilingual_v2",
+            #     #language = self.current_language
+            # ),
 
         )
         self.menu = menu
@@ -480,6 +482,13 @@ class Greeter(BaseAgent):
         userdata.agents_language = self.current_language
 
         return await self._transfer_to_agent("takeaway", context)
+
+    @function_tool()
+    async def end_call(self) -> None:
+        """Use this tool to indicate that consent has not been given and the call should end."""
+        await self.session.say("Thank you for your time, have a wonderful day.")
+        job_ctx = get_job_context()
+        await job_ctx.api.room.delete_room(api.DeleteRoomRequest(room=job_ctx.room.name))
 
     async def on_enter(self):
         await self.session.say(WELCOME_GREETINGS)
@@ -553,13 +562,14 @@ class  ExperiencesSearcher(BaseAgent):
             tools=[
                 to_greeter
             ],
-            #tts = cartesia.TTS(voice=voices["reservation"]),
 
-            tts = elevenlabs.TTS(
-                voice_id=voices["greeter"],
-                model="eleven_multilingual_v2",
-                # language = self.current_language
-            ),
+            tts = cartesia.TTS(voice=voices["reservation"]),
+
+            # tts = elevenlabs.TTS(
+            #     voice_id=voices["greeter"],
+            #     model="eleven_multilingual_v2",
+            #     # language = self.current_language
+            # ),
         )
 
         self.language_names = {
@@ -669,7 +679,7 @@ class  ExperiencesSearcher(BaseAgent):
 
               if experiences_option is not None:
                   userdata = context.userdata
-                  userdata.booking_tour_id = experiences_option['']
+                  userdata.booking_tour_id = experiences_option['id']
                   return f"You want a reservation for {experiences_option['title']}"
               else:
                   await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
@@ -706,13 +716,14 @@ class Reservation(BaseAgent):
                 update_booking_children_number,
                 to_greeter
             ],
-            #tts = cartesia.TTS(voice=voices["reservation"]),
 
-            tts=elevenlabs.TTS(
-                voice_id=voices["greeter"],
-                model="eleven_multilingual_v2",
-                # language = self.current_language
-            ),
+            tts = cartesia.TTS(voice=voices["reservation"]),
+
+            # tts=elevenlabs.TTS(
+            #     voice_id=voices["greeter"],
+            #     model="eleven_multilingual_v2",
+            #     # language = self.current_language
+            # ),
         )
 
         self.language_names = {
@@ -805,7 +816,7 @@ class Reservation(BaseAgent):
         time: Annotated[str, Field(description="The reservation time")],
         context: RunContext_T,
     ) -> str:
-        """Called when the user provides their reservation time.
+        """Called when the user provides their reservation date and time.
         Confirm the time with the user before calling the function."""
         userdata = context.userdata
         userdata.reservation_time = time
@@ -821,6 +832,9 @@ class Reservation(BaseAgent):
         if not userdata.reservation_time:
             return "Please provide reservation time first."
 
+        print("**** User reservation data *****")
+        print(f"{userdata.summarize()}")
+
         return await self._transfer_to_agent("greeter", context)
 
 
@@ -833,8 +847,8 @@ class Takeaway(BaseAgent):
                 "Clarify special requests and confirm the order with the customer."
             ),
             tools=[to_greeter],
-            #tts=cartesia.TTS(voice=voices["takeaway"]),
-            tts = elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
+            tts = cartesia.TTS(voice=voices["takeaway"]),
+            #tts = elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
         )
 
         self.language_names = {
@@ -916,8 +930,8 @@ class Checkout(BaseAgent):
                 "information, including the card number, expiry date, and CVV step by step."
             ),
             tools=[update_name, update_phone, to_greeter],
-            #tts=cartesia.TTS(voice=voices["checkout"]),
-            tts = elevenlabs.TTS( voice_id=voices["checkout"],     model="eleven_multilingual_v2"),
+            tts = cartesia.TTS(voice=voices["checkout"]),
+            #tts = elevenlabs.TTS( voice_id=voices["checkout"],     model="eleven_multilingual_v2"),
 
         )
 
@@ -1011,12 +1025,12 @@ async def entrypoint(ctx: JobContext):
             temperature=0.8,
         ),
 
-        #tts = cartesia.TTS(),
+        tts = cartesia.TTS(),
 
-        tts = elevenlabs.TTS(
-            voice_id="ODq5zmih8GrVes37Dizd",
-            model="eleven_multilingual_v2"
-        ),
+        # tts = elevenlabs.TTS(
+        #     voice_id="ODq5zmih8GrVes37Dizd",
+        #     model="eleven_multilingual_v2"
+        # ),
 
         # google.TTS(
         #     gender="female",

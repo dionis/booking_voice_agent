@@ -87,7 +87,7 @@ def get_experience(id: int) -> Optional[dict]:
 
 def get_experience_by_title(title: str) -> Optional[dict]:
     """Get an experience by title"""
-    result = supabase.table('experiences').select("*").text_search('title',title).execute()
+    result = supabase.table('experiences').select("*").text_search('title',f"'{title}'").execute()
 
     return result.data[0] if result.data else None
 
