@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Annotated, Optional
 
@@ -6,7 +7,7 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import Field
 
-from livekit.agents import JobContext, WorkerOptions, cli, ChatContext, ChatMessage, get_job_context
+from livekit.agents import JobContext, WorkerOptions, cli, ChatContext, ChatMessage, get_job_context, mcp
 from livekit.agents.llm import function_tool
 from livekit.agents.voice import Agent, AgentSession, RunContext
 from livekit.agents.voice.room_io import RoomInputOptions
@@ -130,6 +131,8 @@ class BookingUserData:
 
     reservation_time: Optional[str] = None
 
+    transport_reservation_time: Optional[str] = None
+
     order: Optional[list[str]] = None
 
     # customer_credit_card: Optional[str] = None
@@ -143,6 +146,18 @@ class BookingUserData:
     prev_agent: Optional[Agent] = None
 
     agents_language: Optional[str] = 'en'
+
+    booking_transport_type_vehicle: [str] = None
+    booking_transport_id: Optional[int] = 0
+
+    booking_transport_driver_name: [str] = None
+    booking_transport_driver_id: Optional[int] = 0
+
+    booking_transport_amount: Optional[float] = 0.0
+    booking_travel_id: Optional[int] = 0
+    reservation_start_time: Optional[str] = None
+    booking_transportation_address: Optional[list[str]] = None
+
 
     def summarize(self) -> str:
         data = {
@@ -159,6 +174,14 @@ class BookingUserData:
             "booking_tour_language": self.booking_tour_language or "unknown",
             "booking_tour_id": self.booking_tour_id or "unknown",
             "booking_payment_type": self.booking_payment_type or "unknown",
+            "booking_transportation_address": self.booking_transportation_address or "unknown",
+            "transport_reservation_time": self.transport_reservation_time or "unknown",
+            "booking_transport_type_vehicle": self.booking_transport_type_vehicle or "unknown",
+            "booking_transport_id": self.booking_transport_id or "unknown",
+            "booking_transport_driver_name": self.booking_transport_driver_name or "unknown",
+            "booking_transport_driver_id": self.booking_travel_id or "unknown",
+            "booking_transport_amount": self.booking_transport_amount or "unknown",
+            "booking_travel_id": self.booking_travel_id or "unknown",
             # "credit_card": {
             #     "number": self.customer_credit_card or "unknown",
             #     "expiry": self.customer_credit_card_expiry or "unknown",
@@ -171,6 +194,39 @@ class BookingUserData:
         }
         # summarize in yaml performs better than json
         return yaml.dump(data)
+
+@dataclass
+class BookingUserTransport( BookingUserData):
+        booking_transport_type_vehicle: [str] = None
+        booking_transport_id: Optional[int] = 0
+
+        booking_transport_driver_name: [str] = None
+        booking_transport_driver_id: Optional[int] = 0
+
+        booking_transport_amount: Optional[float] = 0.0
+        booking_travel_id: Optional[int] = 0
+        reservation_start_time: Optional[str] = None
+        booking_transportation_address: Optional[list[str]] = None
+
+        def summarize(self) -> str:
+            data = {
+                "customer_name": self.customer_name or "unknown",
+                "customer_last_name": self.customer_last_name or "unknown",
+                "customer_phone": self.customer_phone or "unknown",
+                "customer_email": self.customer_email or "unknown",
+                "reservation_start_time": self.reservation_start_time or "unknown",
+                "booking_transportation_address": self.booking_transportation_address or "unknown",
+                "booking_number_of_passengers": self.booking_number_of_passengers or "unknown",
+                "booking_transport_type_vehicle": self.booking_transport_type_vehicle or "unknown",
+                "booking_transport_id": self.booking_transport_id or "unknown",
+                "booking_transport_driver_name": self.booking_transport_driver_name or "unknown",
+                "booking_transport_driver_id": self.booking_travel_id or "unknown",
+                "booking_transport_amount": self.booking_transport_amount or "unknown",
+                "booking_travel_id": self.booking_travel_id or "unknown",
+                "checked_out": self.checked_out or False,
+            }
+            # summarize in yaml performs better than json
+            return yaml.dump(data)
 
 
 RunContext_T = RunContext[UserData]
@@ -267,6 +323,22 @@ async def to_greeter(context: RunContext_T) -> Agent:
     curr_agent: BaseAgent = context.session.current_agent
     return await curr_agent._transfer_to_agent("greeter", context)
 
+@function_tool()
+async def get_driver_to_transportation(
+        travel_distance: Annotated[int, Field(description="The travel distance")],
+        address_list: Annotated[list[str], Field(description="The driver's address")],
+    context: RunContext_T,)-> str:
+    """Called when has the travel distance and the list ordered address."""
+    #result_rag = supabase_client.get_possible_drivers(travel_distance, address_list)
+    return ''
+
+@function_tool()
+async def verify_fly_time(
+        fly_company: Annotated[str, Field(description="The fly company name")],
+        fly_number: Annotated[str, Field(description="The fly number")],
+    context: RunContext_T,)-> str:
+    """Called for validate a fly in airport with the user's fly company name and the fly number."""
+    return 'OK'
 ###
 #   Call remote rag functions
 ##
@@ -470,6 +542,21 @@ class Greeter(BaseAgent):
 
         #return await self._transfer_to_agent("reservation", context)
         return await self._transfer_to_agent("experiences_searcher", context)
+
+    @function_tool()
+    async def to_reservation_transport(self, context: RunContext_T) -> tuple[Agent, str]:
+        """Called when user wants to make or update a cab reservation.
+        This function handles transitioning to the cab reservation agent
+        who will collect the necessary details like place to move, reservation time,
+        customer name and phone number."""
+
+        # Set language to communicate in another Agents
+        userdata = context.userdata
+        #context.userdata_transport = BookingUserTransport()
+        userdata.agents_language = self.current_language
+
+        # return await self._transfer_to_agent("reservation", context)
+        return await self._transfer_to_agent("cabs_reservation", context)
 
     @function_tool()
     async def to_takeaway(self, context: RunContext_T) -> tuple[Agent, str]:
@@ -919,6 +1006,154 @@ class Takeaway(BaseAgent):
 
         return await self._transfer_to_agent("checkout", context)
 
+class CabsReservation(BaseAgent):
+    def __init__(self) -> None:
+        # instructions = "You are a reservation agent at a Punta Cana Booking platform. Your jobs are to ask for "
+        # "the reservation time, then customer's name, and phone number. Then "
+        # "confirm the reservation details with the customer.",
+
+        super().__init__(
+            instructions=load_prompt('booking_transport_prompt.yaml'),
+            tools=[
+                update_name,
+                update_last_name,
+                update_phone,
+                update_email,
+                update_booking_number_of_passengers,
+                get_driver_to_transportation,
+                verify_fly_time,
+                to_greeter
+            ],
+
+            tts = cartesia.TTS( voice = voices["reservation"]),
+            mcp_servers = [
+                mcp.MCPServerStdio(
+                    command ="docker",
+                    args = ["run",
+                             "-i",
+                             "--rm",
+                             "-e",
+                            "GOOGLE_MAPS_API_KEY",
+                           "mcp/google-maps"
+                ],
+                env = {
+                  "GOOGLE_MAPS_API_KEY": os.getenv("AGENT_GOOGLE_MAPS_API_KEY")
+                },
+                client_session_timeout_seconds = 10.0
+            )
+        ],
+        )
+
+        self.language_names = {
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian"
+        }
+
+        self.deepgram_language_codes = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr-CA",
+            "de": "de",
+            "it": "it"
+        }
+
+        self.greetings = {
+            "en": "Hello! I'm now speaking in English. How can I help you today?",
+            "es": "¡Hola! Ahora estoy hablando en español. ¿Cómo puedo ayudarte hoy?",
+            "fr": "Bonjour! Je parle maintenant en français. Comment puis-je vous aider aujourd'hui?",
+            "de": "Hallo! Ich spreche jetzt Deutsch. Wie kann ich Ihnen heute helfen?",
+            "it": "Ciao! Ora sto parlando in italiano. Come posso aiutarti oggi?"
+        }
+
+    async def on_enter(self):
+
+        if self.current_language != None and self.current_language != '':
+            logger.info(f"Agent language is {self.current_language}")
+            await self._switch_language(self.current_language)
+
+        await self.session.say(WELCOME_RESERVATION)
+
+
+    async def _switch_language(self, language_code: str) -> None:
+        """Helper method to switch the language"""
+        # if language_code == self.current_language:
+        #     await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+        #     return
+
+        if self.tts is not None:
+            print(f"Update tts options to {language_code}")
+            self.tts.update_options(language = language_code)
+
+        # session_tts = await self.session.tts
+        #
+        # if session_tts is not None:
+        #     session_tts.update_options(language=language_code)
+
+        if self.stt is not None:
+            deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
+
+            if hasattr(self.stt, 'update_options'):
+              self.stt.update_options(language = deepgram_language)
+
+        self.current_language = language_code
+
+        #await self.session.say(self.greetings[language_code])
+
+    ### Wait the user ask for booking reservation options
+    # async def on_user_turn_completed(
+    #             self, turn_ctx: ChatContext, new_message: ChatMessage,
+    #     ) -> None:
+    #         rag_content = await rag_lookup( new_message.text_content)
+    #         strListOfExperiences = NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES
+    #
+    #         if len(rag_content) == 0 :
+    #             #Say there are not result
+    #             #self.session.say(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+    #             print(NOT_EXIST_EXPERIENCES_TOUR_WITH_YOUR_PREFERENCES)
+    #         else:
+    #             # booking_userdata = turn_ctx.userdata
+    #             # booking_userdata.booking_tour_id = rag_content
+    #             self.listOfExperenciesInRagSearch = rag_content
+    #             listOfExperiences = [ iexperiences['title'] for iexperiences in rag_content ]
+    #             separator = "\n"
+    #             strListOfExperiences = separator.join(listOfExperiences)
+    #
+    #             #
+    #             # Use for give more LLM context !!!! IMPORTANT !!!!!
+    #             #
+    #
+    #             turn_ctx.add_message(role="assistant", content = strListOfExperiences)
+    #             await self.update_chat_ctx(turn_ctx)
+
+    @function_tool()
+    async def update_reservation_time(
+        self,
+        time: Annotated[str, Field(description="The reservation time")],
+        context: RunContext_T,
+    ) -> str:
+        """Called when the user provides their reservation date and time.
+        Confirm the time with the user before calling the function."""
+        userdata = context.userdata
+        userdata.reservation_time = time
+        return f"The reservation time is updated to {time}"
+
+    @function_tool()
+    async def confirm_transport_order(self, context: RunContext_T) -> str | tuple[Agent, str]:
+        """Called when the user confirms the reservation."""
+        userdata = context.userdata
+        if not userdata.customer_name or not userdata.customer_phone:
+            return "Please provide your name and phone number first."
+
+        if not userdata.reservation_time:
+            return "Please provide reservation time first."
+
+        print("**** User reservation data *****")
+        print(f"{userdata.summarize()}")
+
+        return await self._transfer_to_agent("greeter", context)
 
 class Checkout(BaseAgent):
     def __init__(self, menu: str) -> None:
@@ -1009,7 +1244,8 @@ async def entrypoint(ctx: JobContext):
             "reservation": Reservation(),
             "takeaway": Takeaway(menu),
             "checkout": Checkout(menu),
-            "experiences_searcher": ExperiencesSearcher()
+            "experiences_searcher": ExperiencesSearcher(),
+            "cabs_reservation": CabsReservation()
         }
     )
 

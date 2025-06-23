@@ -191,3 +191,7 @@ def list_bookings(limit: int = 100) -> list:
     """List bookings (default limit 100)"""
     result = supabase.table('bookings').select("*").limit(limit).execute()
     return result.data
+
+
+def get_possible_drivers(travel_distance, address_list):
+    return "Driver's name example"

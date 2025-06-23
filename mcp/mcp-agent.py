@@ -36,7 +36,9 @@ async def entrypoint(ctx: JobContext):
         tts=openai.TTS(voice="ash"),
         turn_detection=MultilingualModel(),
         mcp_servers=[
-            mcp.MCPServerHTTP(url="http://localhost:8000/sse"),
+            mcp.MCPServerHTTP(
+                url="http://localhost:8000/sse",
+            ),
         ],
     )
 

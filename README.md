@@ -55,3 +55,10 @@ A project for tourist customer booking tour in someone place. Using the LiveKit 
   - This is a starter template for LiveKit Agents that provides a simple voice interface using the LiveKit JavaScript SDK. 
   It supports voice, transcriptions, and virtual avatars.
 
+
+###Google Map MCP server
+
+- ## [Google Maps MCP Server](https://mcp.so/server/google-maps/modelcontextprotocol?tab=content)
+- ## [MCP Google Maps](https://mcp.so/server/MCP-Google-Maps/ArtixZ)
+- ## [MCP AI Agent with Google ADK, Google Maps, and Opik](https://mcp.so/server/mcp-ai-agent/luuisotorres)
+- ## [Otros](https://mcp.so/explore?q=Google+maps)
