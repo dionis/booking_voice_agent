@@ -25,3 +25,4 @@ langchain_community
 langchain-text-splitters
 pypdf
 tqdm
+faker

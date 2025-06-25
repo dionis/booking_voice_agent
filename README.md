@@ -62,3 +62,8 @@ A project for tourist customer booking tour in someone place. Using the LiveKit 
 - ## [MCP Google Maps](https://mcp.so/server/MCP-Google-Maps/ArtixZ)
 - ## [MCP AI Agent with Google ADK, Google Maps, and Opik](https://mcp.so/server/mcp-ai-agent/luuisotorres)
 - ## [Otros](https://mcp.so/explore?q=Google+maps)
+
+###Using Faker models
+
+- ## [faker](https://github.com/joke2k/faker)
+- ## [Locale es_ES](https://faker.readthedocs.io/en/master/locales/es_ES.html)

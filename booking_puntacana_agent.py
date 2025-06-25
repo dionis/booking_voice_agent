@@ -2,11 +2,12 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Annotated, Optional
+from faker import Faker
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import Field
-
+from livekit.api import DeleteRoomRequest
 from livekit.agents import JobContext, WorkerOptions, cli, ChatContext, ChatMessage, get_job_context, mcp
 from livekit.agents.llm import function_tool
 from livekit.agents.voice import Agent, AgentSession, RunContext
@@ -29,6 +30,8 @@ from util import load_prompt
 
 logger = logging.getLogger("restaurant-example")
 logger.setLevel(logging.INFO)
+
+
 
 load_dotenv('config/.env')
 
@@ -330,7 +333,16 @@ async def get_driver_to_transportation(
     context: RunContext_T,)-> str:
     """Called when has the travel distance and the list ordered address."""
     #result_rag = supabase_client.get_possible_drivers(travel_distance, address_list)
-    return ''
+
+    #es_ES Spanish localizacion
+    #https://faker.readthedocs.io/en/master/locales/es_ES.html
+    userdata = context.userdata
+
+    LOCALE = 'es_ES'
+    fake = Faker(LOCALE)
+    userdata.booking_transport_driver_name  = fake.name()
+
+    return userdata.booking_transport_driver_name
 
 @function_tool()
 async def verify_fly_time(
@@ -471,6 +483,7 @@ class Greeter(BaseAgent):
 
         #Define default language
         self.current_language = "es"
+
         # instructions:
         #     "You are a friendly booking tour receptionist "
         #      "First ask to the user the language wanted and change to the user's preference."
@@ -530,7 +543,7 @@ class Greeter(BaseAgent):
 
     @function_tool()
     async def to_reservation(self, context: RunContext_T) -> tuple[Agent, str]:
-        """Called when user wants to make or update a reservation.
+        """Called when user wants to make a reservation.
         This function handles transitioning to the reservation agent
         who will collect the necessary details like reservation time,
         customer name and phone number."""
@@ -561,8 +574,9 @@ class Greeter(BaseAgent):
     @function_tool()
     async def to_takeaway(self, context: RunContext_T) -> tuple[Agent, str]:
         """Called when the user wants to update a booking tour.
-        This includes handling orders for pickup, delivery, or when the user wants to
-        proceed to checkout with their existing order."""
+        This includes change or update user's name or last name, phone number, reservation time, number of peoples,
+         and other or when the user wants to proceed to checkout with their existing reservation.
+         """
 
         #Set language to communicate in another Agents
         userdata = context.userdata
@@ -575,7 +589,7 @@ class Greeter(BaseAgent):
         """Use this tool to indicate that consent has not been given and the call should end."""
         await self.session.say("Thank you for your time, have a wonderful day.")
         job_ctx = get_job_context()
-        await job_ctx.api.room.delete_room(api.DeleteRoomRequest(room=job_ctx.room.name))
+        await job_ctx.api.room.delete_room(DeleteRoomRequest(room = job_ctx.room.name))
 
     async def on_enter(self):
         await self.session.say(WELCOME_GREETINGS)
@@ -1227,6 +1241,8 @@ async def entrypoint(ctx: JobContext):
 
     userdata = UserData()
 
+    init_language = 'es'
+
     booking_userdata = BookingUserData()
 
     # userdata.agents.update(
@@ -1258,10 +1274,12 @@ async def entrypoint(ctx: JobContext):
 
         llm = google.LLM(
             model="gemini-2.0-flash-exp",
-            temperature=0.8,
+            temperature = 0.8,
         ),
 
-        tts = cartesia.TTS(),
+        tts = cartesia.TTS(
+            language = init_language
+        ),
 
         # tts = elevenlabs.TTS(
         #     voice_id="ODq5zmih8GrVes37Dizd",
