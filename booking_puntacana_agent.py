@@ -77,6 +77,8 @@ MUST_SELECT_AN_OPTIONS_IN_LIST = (f"You must select an experiences in a list.")
 
 NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION = (f"Sorry, not exits tour with your preferences.")
 
+YOUR_CREDENTIALS_WRONG = (f"Your credentials are wrong, please check again")
+
 @dataclass
 class UserData:
     customer_name: Optional[str] = None
@@ -938,6 +940,137 @@ class Reservation(BaseAgent):
 
         return await self._transfer_to_agent("greeter", context)
 
+class UpdateReservation(BaseAgent):
+    def __init__(self, menu: str) -> None:
+        super().__init__(
+            instructions=(
+                f"Your are a takeaway agent that takes orders from the customer. "
+                f"Our menu is: {menu}\n"
+                "Clarify special requests and confirm the order with the customer."
+            ),
+            tools=[
+                update_name,
+                update_last_name,
+                update_phone,
+                update_email,
+                update_booking_number_of_passengers,
+                update_booking_adults_number,
+                update_booking_children_number,
+                to_greeter
+            ],
+            tts = cartesia.TTS(voice=voices["takeaway"]),
+            #tts = elevenlabs.TTS(voice_id=voices["takeaway"],     model="eleven_multilingual_v2"),
+        )
+
+        self.language_names = {
+            "en": "English",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian"
+        }
+
+        self.deepgram_language_codes = {
+            "en": "en",
+            "es": "es",
+            "fr": "fr-CA",
+            "de": "de",
+            "it": "it"
+        }
+
+        self.greetings = {
+            "en": "Hello! I'm now speaking in English. How can I help you today?",
+            "es": "¡Hola! Ahora estoy hablando en español. ¿Cómo puedo ayudarte hoy?",
+            "fr": "Bonjour! Je parle maintenant en français. Comment puis-je vous aider aujourd'hui?",
+            "de": "Hallo! Ich spreche jetzt Deutsch. Wie kann ich Ihnen heute helfen?",
+            "it": "Ciao! Ora sto parlando in italiano. Come posso aiutarti oggi?"
+        }
+
+    async def _switch_language(self, language_code: str) -> None:
+        """Helper method to switch the language"""
+        if language_code == self.current_language:
+            await self.session.say(f"I'm already speaking in {self.language_names[language_code]}.")
+            return
+
+        if self.tts is not None:
+            self.tts.update_options(language=language_code)
+
+        if self.stt is not None:
+            deepgram_language = self.deepgram_language_codes.get(language_code, language_code)
+            self.stt.update_options(language=deepgram_language)
+
+        self.current_language = language_code
+
+        await self.session.say(self.greetings[language_code])
+
+    async def identify_customer(self, login: str, password: str,  context: RunContext_T):
+        """
+        Identify a customer by their login and password.
+
+        Args:
+            login: The customer's login
+            password: The customer's password
+        """
+
+        userdata: UserData = self.session.userdata
+        user_id = supabase_client.validate_user_in_db(login, password)
+        if user_id == '':
+          await self.session.say(YOUR_CREDENTIALS_WRONG)
+
+          return await self._transfer_to_agent("greeter", context)
+        else:
+          userdata.user_id = user_id
+
+          return f"Thank you, {login}. I've found your account."
+
+    @function_tool()
+    async def update_reservation_time(
+            self,
+            time: Annotated[str, Field(description="The reservation time")],
+            context: RunContext_T,
+    ) -> str:
+        """Called when the user provides their reservation date and time.
+        Confirm the time with the user before calling the function."""
+        userdata = context.userdata
+        userdata.reservation_time = time
+        return f"The reservation time is updated to {time}"
+
+    @function_tool()
+    async def confirm_reservation(self, context: RunContext_T) -> str | tuple[Agent, str]:
+        """Called when the user confirms the reservation."""
+        userdata = context.userdata
+        if not userdata.customer_name or not userdata.customer_phone:
+            return "Please provide your name and phone number first."
+
+        if not userdata.reservation_time:
+            return "Please provide reservation time first."
+
+        print("**** User reservation data *****")
+        print(f"{userdata.summarize()}")
+
+        return await self._transfer_to_agent("greeter", context)
+
+    @function_tool()
+    async def user_select_option(
+            self,
+            selected_option: Annotated[str, Field(description="An user selected options in an experiences list")],
+            context: RunContext_T,
+    ) -> str:
+        """Called when a customer select a possible options in a list of title of experiences or tour.
+        The selected title is given as selected_option"""
+
+        ## Verify if a str is a title and search for possible title id
+        if selected_option == '':
+            await self.session.say(MUST_SELECT_AN_OPTIONS_IN_LIST)
+        else:
+            experiences_option = supabase_client.get_experience_by_title(selected_option)
+
+            if experiences_option is not None:
+                userdata = context.userdata
+                userdata.booking_tour_id = experiences_option['id']
+                return f"You want a reservation for {experiences_option['title']}"
+            else:
+                await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
 
 class Takeaway(BaseAgent):
     def __init__(self, menu: str) -> None:

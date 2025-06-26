@@ -73,6 +73,19 @@ class Booking(BaseModel):
     tour_id: Optional[int] = None
     reference_number: Optional[str] = None
 
+# Clase Pydantic para usuarios
+class User(BaseModel):
+    id: Optional[int] = None
+    username: str
+    password: str
+
+# Clase Pydantic para la relación usuario-experiencia
+class UserExperience(BaseModel):
+    id: Optional[int] = None
+    user_id: int
+    experience_id: int
+    reserved_at: Optional[str] = None
+
 def create_experience(experience: Experience) -> dict:
     """Create a new experience in the database"""
     data = experience.model_dump()
@@ -195,3 +208,67 @@ def list_bookings(limit: int = 100) -> list:
 
 def get_possible_drivers(travel_distance, address_list):
     return "Driver's name example"
+
+
+# CRUD para users
+def create_user(user: User) -> dict:
+    data = user.model_dump(exclude_unset=True)
+    result = supabase.table('users').insert(data).execute()
+    return result.data
+
+def get_user(id: int) -> Optional[dict]:
+    result = supabase.table('users').select("*").eq('id', id).execute()
+    return result.data[0] if result.data else None
+
+def update_user(id: int, user: User) -> dict:
+    data = user.model_dump(exclude_unset=True)
+    result = supabase.table('users').update(data).eq('id', id).execute()
+    return result.data
+
+def delete_user(id: int) -> dict:
+    result = supabase.table('users').delete().eq('id', id).execute()
+    return result.data
+
+def get_user_by_username(username: str) -> Optional[dict]:
+    result = supabase.table('users').select("*").eq('username', username).execute()
+    return result.data[0] if result.data else None
+
+# CRUD para user_experiences
+def create_user_experience(user_experience: UserExperience) -> dict:
+    data = user_experience.model_dump(exclude_unset=True)
+    result = supabase.table('user_experiences').insert(data).execute()
+    return result.data
+
+def get_user_experience(id: int) -> Optional[dict]:
+    result = supabase.table('user_experiences').select("*").eq('id', id).execute()
+    return result.data[0] if result.data else None
+
+def update_user_experience(id: int, user_experience: UserExperience) -> dict:
+    data = user_experience.model_dump(exclude_unset=True)
+    result = supabase.table('user_experiences').update(data).eq('id', id).execute()
+    return result.data
+
+def delete_user_experience(id: int) -> dict:
+    result = supabase.table('user_experiences').delete().eq('id', id).execute()
+    return result.data
+
+def get_user_experiences_by_user(user_id: int) -> list:
+    result = supabase.table('user_experiences').select("*").eq('user_id', user_id).execute()
+    return result.data
+
+# Obtener experiencias reservadas por usuario
+def get_experiences_for_user(user_id: int) -> list:
+    user_experiences = get_user_experiences_by_user(user_id)
+    experience_ids = [ue['experience_id'] for ue in user_experiences]
+    if not experience_ids:
+        return []
+    result = supabase.table('experiences').select("*").in_('id', experience_ids).execute()
+    return result.data
+
+# Obtener detalle de una experiencia reservada por usuario
+def get_user_experience_detail(user_id: int, experience_id: int) -> Optional[dict]:
+    result = supabase.table('user_experiences').select("*").eq('user_id', user_id).eq('experience_id', experience_id).execute()
+    if not result.data:
+        return None
+    exp = supabase.table('experiences').select("*").eq('id', experience_id).execute()
+    return exp.data[0] if exp.data else None
