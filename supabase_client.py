@@ -86,6 +86,13 @@ class UserExperience(BaseModel):
     experience_id: int
     reserved_at: Optional[str] = None
 
+class UserBooking(BaseModel):
+    id: Optional[int] = None
+    user_id: int
+    booking_id: int
+    related_at: Optional[str] = None
+
+
 def create_experience(experience: Experience) -> dict:
     """Create a new experience in the database"""
     data = experience.model_dump()
@@ -272,3 +279,43 @@ def get_user_experience_detail(user_id: int, experience_id: int) -> Optional[dic
         return None
     exp = supabase.table('experiences').select("*").eq('id', experience_id).execute()
     return exp.data[0] if exp.data else None
+
+# CRUD para user_bookings
+def create_user_booking(user_booking: UserBooking) -> dict:
+    data = user_booking.model_dump(exclude_unset=True)
+    result = supabase.table('user_bookings').insert(data).execute()
+    return result.data
+
+def get_user_booking(id: int) -> Optional[dict]:
+    result = supabase.table('user_bookings').select("*").eq('id', id).execute()
+    return result.data[0] if result.data else None
+
+def update_user_booking(id: int, user_booking: UserBooking) -> dict:
+    data = user_booking.model_dump(exclude_unset=True)
+    result = supabase.table('user_bookings').update(data).eq('id', id).execute()
+    return result.data
+
+def delete_user_booking(id: int) -> dict:
+    result = supabase.table('user_bookings').delete().eq('id', id).execute()
+    return result.data
+
+def get_user_bookings_by_user(user_id: int) -> list:
+    result = supabase.table('user_bookings').select("*").eq('user_id', user_id).execute()
+    return result.data
+
+# Obtener todas las reservaciones (bookings) de un usuario
+def get_bookings_for_user(user_id: int) -> list:
+    user_bookings = get_user_bookings_by_user(user_id)
+    booking_ids = [ub['booking_id'] for ub in user_bookings]
+    if not booking_ids:
+        return []
+    result = supabase.table('bookings').select("*").in_('id', booking_ids).execute()
+    return result.data
+
+# Obtener el detalle de una reservación (booking) específica de un usuario
+def get_user_booking_detail(user_id: int, booking_id: int) -> Optional[dict]:
+    result = supabase.table('user_bookings').select("*").eq('user_id', user_id).eq('booking_id', booking_id).execute()
+    if not result.data:
+        return None
+    booking = supabase.table('bookings').select("*").eq('id', booking_id).execute()
+    return booking.data[0] if booking.data else None
