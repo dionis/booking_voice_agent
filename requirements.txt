@@ -9,7 +9,7 @@
 
 # python 3.10.11
 
-livekit-agents[openai, silero, elevenlabs, deepgram, cartesia, silero]~=1.0
+livekit-agents[openai, silero, elevenlabs, deepgram, cartesia, silero, rime]~=1.0
 livekit-agents[google, mcp]~=1.0
 livekit-plugins-noise-cancellation~=0.2
 fastapi==0.115.8

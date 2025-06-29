@@ -26,7 +26,9 @@ import supabase_client
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 
+
 from util import load_prompt
+from pydantic.tools import parse_obj_as
 
 logger = logging.getLogger("restaurant-example")
 logger.setLevel(logging.INFO)
@@ -40,12 +42,21 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
+#
+#  Cartasian
+#
+
 voices = {
     "greeter": "794f9389-aac1-45b6-b726-9d9369183238",
     "reservation": "156fb8d2-335b-4950-9cb3-a2d33befec77",
     "takeaway": "6f84f4b8-58a2-430c-8c79-688dad597532",
     "checkout": "39b376fc-488e-4d0c-8b37-e00b72059fdd",
 }
+
+
+#
+#  ElevenLabs
+#
 
 # voices = {
 #     "greeter": "9BWtsMINqrJLrRacOk9x",
@@ -56,10 +67,17 @@ voices = {
 # }
 
 
+#
+#   OpenAI
+#   Doesn't have language feature
 
-
-
-
+# voices = {
+#     "greeter": "alloy",
+#     "reservation": "FGY2WhTYpPnrIDTdsKH5",
+#     "takeaway": "ballad",
+#     "checkout": "fable",
+#     "default": "onyx"
+# }
 
 SERVICE_NAME = 'Punta Cana Booking platform'
 WELCOME_GREETINGS =  (f"Hi there! Welcome to our {SERVICE_NAME}."
@@ -78,6 +96,8 @@ MUST_SELECT_AN_OPTIONS_IN_LIST = (f"You must select an experiences in a list.")
 NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION = (f"Sorry, not exits tour with your preferences.")
 
 YOUR_CREDENTIALS_WRONG = (f"Your credentials are wrong, please check again")
+
+NOT_EXIST_USER_INFORMATION = (f"Not exist user information")
 
 @dataclass
 class UserData:
@@ -119,6 +139,7 @@ class UserData:
 
 @dataclass
 class BookingUserData:
+    user_id: Optional[str] = None
     customer_name: Optional[str] = None
     customer_last_name: Optional[str] = None
     customer_phone: Optional[str] = None
@@ -500,10 +521,12 @@ class Greeter(BaseAgent):
 
             #llm=openai.LLM(parallel_tool_calls=False),
 
-            llm=google.LLM(
-                model="gemini-2.0-flash-exp",
-                temperature=0.8,
-            ),
+            llm=openai.LLM(model="gpt-4o-mini"),
+
+            # llm=google.LLM(
+            #     model="gemini-2.0-flash-exp",
+            #     temperature=0.8,
+            # ),
 
             tts = cartesia.TTS(
                 voice = voices["greeter"],
@@ -584,7 +607,7 @@ class Greeter(BaseAgent):
         userdata = context.userdata
         userdata.agents_language = self.current_language
 
-        return await self._transfer_to_agent("takeaway", context)
+        return await self._transfer_to_agent("management_reservation", context)
 
     @function_tool()
     async def end_call(self) -> None:
@@ -941,13 +964,14 @@ class Reservation(BaseAgent):
         return await self._transfer_to_agent("greeter", context)
 
 class UpdateReservation(BaseAgent):
-    def __init__(self, menu: str) -> None:
+    def __init__(self) -> None:
         super().__init__(
-            instructions=(
-                f"Your are a takeaway agent that takes orders from the customer. "
-                f"Our menu is: {menu}\n"
-                "Clarify special requests and confirm the order with the customer."
-            ),
+            # instructions=(
+            #     f"Your are a takeaway agent that takes orders from the customer. "
+            #     f"Our menu is: {menu}\n"
+            #     "Clarify special requests and confirm the order with the customer."
+            # ),
+            instructions=load_prompt('reservation_update_prompt.yaml'),
             tools=[
                 update_name,
                 update_last_name,
@@ -1003,6 +1027,7 @@ class UpdateReservation(BaseAgent):
 
         await self.session.say(self.greetings[language_code])
 
+    @function_tool()
     async def identify_customer(self, login: str, password: str,  context: RunContext_T):
         """
         Identify a customer by their login and password.
@@ -1012,14 +1037,15 @@ class UpdateReservation(BaseAgent):
             password: The customer's password
         """
 
-        userdata: UserData = self.session.userdata
-        user_id = supabase_client.validate_user_in_db(login, password)
-        if user_id == '':
-          await self.session.say(YOUR_CREDENTIALS_WRONG)
+        userdata = context.userdata
+        print(f"Lowercase login {str.lower(login)} and password {str.lower(password)}")
+        loggedUserData = await supabase_client.get_user_by_login_passw ( str.lower(login) , str.lower(password))
 
+        if loggedUserData == None:
+          await self.session.say(YOUR_CREDENTIALS_WRONG)
           return await self._transfer_to_agent("greeter", context)
         else:
-          userdata.user_id = user_id
+          userdata.user_id = loggedUserData['id']
 
           return f"Thank you, {login}. I've found your account."
 
@@ -1050,8 +1076,88 @@ class UpdateReservation(BaseAgent):
 
         return await self._transfer_to_agent("greeter", context)
 
+    # async def copy_booking_user_data_to_booking(booking_user_data: BookingUserData, booking_id: int = 0) -> Booking:
+    #     """
+    #     Copy similar attributes from BookingUserData to Booking class.
+    #
+    #     Args:
+    #         booking_user_data: The source BookingUserData object
+    #         booking_id: The ID for the new booking (default 0 for new bookings)
+    #
+    #     Returns:
+    #         Booking: A new Booking object with copied attributes
+    #     """
+    #     return Booking(
+    #         id=booking_id,
+    #         # Customer information
+    #         first_name=booking_user_data.customer_name,
+    #         last_name=booking_user_data.customer_last_name,
+    #         phone=booking_user_data.customer_phone,
+    #         email=booking_user_data.customer_email,
+    #
+    #         # Passenger information
+    #         number_of_passengers=booking_user_data.booking_number_of_passengers,
+    #         number_adults=booking_user_data.booking_adults_number,
+    #         number_children=booking_user_data.booking_children_number,
+    #
+    #         # Booking details
+    #         amount=booking_user_data.booking_amount,
+    #         language=booking_user_data.booking_tour_language,
+    #         tour_id=booking_user_data.booking_tour_id,
+    #         payment_type=booking_user_data.booking_payment_type,
+    #
+    #         # Time information
+    #         pick_up_time=booking_user_data.reservation_time,
+    #
+    #         # Transport information (mapped to available fields)
+    #         # Note: Some transport fields don't have direct mapping in Booking class
+    #         # You may need to extend the Booking class or handle these separately
+    #
+    #         # Additional fields that might be useful
+    #         status="pending",  # Default status for new bookings
+    #         payment_status=False,  # Default payment status
+    #     )
+    #
+    async def copy_booking_to_booking_user_data(self, booking: dict, user_id: str) -> BookingUserData:
+        """
+        Copy similar attributes from Booking to BookingUserData class.
+
+        Args:
+            booking: The source Booking object
+
+        Returns:
+            BookingUserData: A new BookingUserData object with copied attributes
+        """
+        return BookingUserData(
+            # Customer information
+            user_id = user_id,
+            customer_name = booking['first_name'],
+            customer_last_name = booking['last_name'],
+            customer_phone = booking['phone'],
+            customer_email = booking['email'],
+
+            # Passenger information
+            booking_number_of_passengers = booking['number_of_passengers'],
+            booking_adults_number = booking['number_adults'],
+            booking_children_number = booking['number_children'],
+
+            # Booking details
+            booking_amount = booking['amount'],
+            booking_tour_language = booking['language'],
+            booking_tour_id = booking['tour_id'],
+            booking_payment_type = booking['payment_type'],
+
+            # Time information
+            reservation_time = booking['pick_up_time'],
+
+            # Additional fields
+            expense = booking['amount'],  # Assuming expense is the same as amount
+            checked_out = booking['payment_status'],  # Assuming checked_out relates to payment status
+        )
+
+
     @function_tool()
-    async def user_select_option(
+    async def user_tour_select_option(
             self,
             selected_option: Annotated[str, Field(description="An user selected options in an experiences list")],
             context: RunContext_T,
@@ -1063,14 +1169,69 @@ class UpdateReservation(BaseAgent):
         if selected_option == '':
             await self.session.say(MUST_SELECT_AN_OPTIONS_IN_LIST)
         else:
-            experiences_option = supabase_client.get_experience_by_title(selected_option)
-
-            if experiences_option is not None:
-                userdata = context.userdata
-                userdata.booking_tour_id = experiences_option['id']
-                return f"You want a reservation for {experiences_option['title']}"
-            else:
+            if self.userExperiencesList == None or len(self.userExperiencesList) == 0:
                 await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
+            else:
+                for  booking_id, bookingObject, title_experiences in  self.userExperiencesList:
+                    if title_experiences == selected_option :
+                        print(f" The booking to modified will be {bookingObject}")
+                        userdata = context.userdata
+                        user_id = userdata.user_id
+                        userdata = await self.copy_booking_to_booking_user_data(bookingObject, user_id)
+
+                        return f"You want modified the information in tours as {userdata}"
+
+                await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
+
+
+
+
+
+    @function_tool()
+    async def not_valid_action(self, context: RunContext_T) -> tuple[Agent, str]:
+        """Called when the user not select an option in tours lists.
+          or failed identify_customer validation wit login and password,
+         and other not valid or error event.
+         """
+        return await to_greeter(context)
+        #return await self._transfer_to_agent("takeaway", context)
+
+    @function_tool()
+    async def customer_booking_list(self, user_id: Annotated[str, Field(description="The user id")], context: RunContext_T) -> str:
+        """called when the user was validated and give a list of their booked tour titles"""
+        userdata = context.userdata
+        user_id = userdata.user_id
+
+        if user_id == None:
+            await self.session.say(NOT_EXIST_USER_INFORMATION)
+            return
+
+        print(f"Change user id by user in system ==> {user_id}")
+
+        user_booking_list = supabase_client.get_user_bookings_by_user(user_id)
+
+        if user_booking_list == None:
+            return
+        else:
+            listOfExperiences = []
+            self.userExperiencesList = []
+
+            for userBooking in user_booking_list:
+                print(f"Booking data {userBooking}")
+
+                result = supabase_client.get_booking(id = int(userBooking['booking_id']))
+
+                if result != None:
+                    experience_result = supabase_client.get_experience(result['tour_id'])
+                    print(f" Experiencie or tour info: {experience_result}")
+                    listOfExperiences.append(experience_result['title'])
+                    self.userExperiencesList.append((result['id'], experience_result, experience_result['title']))
+
+
+
+            setOfListOfExperiences = set(listOfExperiences)
+            separator = "\n"
+            return separator.join(setOfListOfExperiences)
 
 class Takeaway(BaseAgent):
     def __init__(self, menu: str) -> None:
@@ -1394,7 +1555,8 @@ async def entrypoint(ctx: JobContext):
             "takeaway": Takeaway(menu),
             "checkout": Checkout(menu),
             "experiences_searcher": ExperiencesSearcher(),
-            "cabs_reservation": CabsReservation()
+            "cabs_reservation": CabsReservation(),
+            "management_reservation": UpdateReservation()
         }
     )
 
@@ -1403,12 +1565,13 @@ async def entrypoint(ctx: JobContext):
 
 
         stt = deepgram.STT(model="nova-3", language="multi"),
-        # llm=openai.LLM(model="gpt-4o-mini"),
 
-        llm = google.LLM(
-            model="gemini-2.0-flash-exp",
-            temperature = 0.8,
-        ),
+        llm = openai.LLM(model="gpt-4o-mini"),
+
+        # llm = google.LLM(
+        #     model="gemini-2.0-flash-exp",
+        #     temperature = 0.8,
+        # ),
 
         tts = cartesia.TTS(
             language = init_language

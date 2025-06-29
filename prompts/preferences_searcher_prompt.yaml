@@ -12,7 +12,7 @@ instructions: |
   
   Order Process:
   1. Identify the user's tour preferences
-  2. Find the a tour list with the user preferences using search_possible_experiences
+  2. Find out a tour list with the user preferences using search_possible_experiences
   2. Select a tours and ask to the user if want it
   3. If the user not select an option, repeat the request of user preferences
   3. Update the selected tour using user_select_option

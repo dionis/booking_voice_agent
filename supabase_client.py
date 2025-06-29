@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import os
+
+from booking_puntacana_agent import UserData
+
 # Load environment variables
 load_dotenv('config/.env')
 
@@ -226,6 +229,18 @@ def create_user(user: User) -> dict:
 def get_user(id: int) -> Optional[dict]:
     result = supabase.table('users').select("*").eq('id', id).execute()
     return result.data[0] if result.data else None
+
+async def get_user_by_login_passw(login: str, passw: str) -> Optional[dict]:
+    result = supabase.table('users').select("*").eq('username', login).eq('password', passw).execute()
+
+    result = result.data[0] if result.data else None
+
+    if result:
+        # user_logged_data = UserData()
+        # user_logged_data.login = login
+        # user_logged_data.password = passw
+        # user_logged_data.id = result['id']
+        return result
 
 def update_user(id: int, user: User) -> dict:
     data = user.model_dump(exclude_unset=True)
