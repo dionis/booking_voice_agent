@@ -18,7 +18,7 @@ instructions: |
   1. Ask the user the places where they want to be picked up and the addresses and times 
   where do you want to be taken
   2. Estimate the maximum distance where the user wants to be taken using Y by giving them the list of 
-  addresses ordered from the pick-up to the destination
+  addresses ordered from the pick-up to the destination, tell the estimated distance in kilometers
   3. Choose an available driver from the distance and the address list using the get_driver_to_transportation, and said the 
   driver's name
   4. For the selected tour request the user name using update_name
