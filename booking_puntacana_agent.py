@@ -1179,7 +1179,18 @@ class UpdateReservation(BaseAgent):
                         user_id = userdata.user_id
                         userdata = await self.copy_booking_to_booking_user_data(bookingObject, user_id)
 
-                        return f"You want modified the information in tours as {userdata}"
+                        return f"""
+                        You want modified the information in tours as:
+                                user name: {userdata.customer_name}
+                                last name: {userdata.customer_last_name}
+                                phone: {userdata.customer_phone}
+                                Tour title: {title_experiences}
+                                
+                                passenger amount: {userdata.booking_number_of_passengers}
+                                adults amount: {userdata.booking_adults_number}
+                                child amount: {userdata.booking_children_number}
+                                date of tours: {userdata.reservation_time}
+                        """
 
                 await self.session.say(NOT_EXIST_EXPERIENCES_WITH_YOUR_SELECTION)
 
@@ -1225,7 +1236,7 @@ class UpdateReservation(BaseAgent):
                     experience_result = supabase_client.get_experience(result['tour_id'])
                     print(f" Experiencie or tour info: {experience_result}")
                     listOfExperiences.append(experience_result['title'])
-                    self.userExperiencesList.append((result['id'], experience_result, experience_result['title']))
+                    self.userExperiencesList.append((result['id'], result, experience_result['title']))
 
 
 
