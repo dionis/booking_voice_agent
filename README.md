@@ -13,6 +13,12 @@ A project for tourist customer booking tour in someone place. Using the LiveKit 
     This is very important, since it significantly decrease the amount of hallucinations
     that you get from STT model. It will also dramatically decrease your cost!!
 
+
+## Note Initialice the agent orquestation and use the LiveKit playground for interacting
+```
+python booking_puntacana_agent.py dev
+```
+
 - ## [Ollama integration guide](https://docs.livekit.io/agents/integrations/llm/ollama/)
   How to run models locally using Ollama with LiveKit Agents.
 
